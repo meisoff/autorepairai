@@ -10,8 +10,8 @@
 
 import cv2
 from ultralytics import YOLO
-img_pth = "1.jpeg"
-model = YOLO("./car_type/best.pt")
+img_pth = "./car_type/nocar.jpg"
+model = YOLO("./car_type/best_2.pt")
 results = model(source=img_pth)
 res_plotted = results[0].plot()
 cv2.imshow("result", res_plotted)
