@@ -110,7 +110,7 @@ class Detection:
 
 
 detection = Detection(
-    model_path='best.onnx',
+    model_path='models/car_damage.onnx',
     classes=['damaged door', 'damaged window', 'damaged headlight', 'damaged mirror', 'dent', 'damaged hood',
              'damaged bumper', 'damaged wind shield']
 )

@@ -10,24 +10,10 @@ import base64
 import json
 
 
-def detect_car(fileBase64):
-    """
-    :param fileBase64:
-    :return: int
-    """
-
-    data_car = type_of_car(fileBase64)
-
-    return data_car
-
-
-    #TODO: добавить модель классификации изображения
-
-
 def detect_damage(fileBase64):
     try:
         detection = Detection(
-            model_path='best.onnx',
+            model_path='models/car_damage.onnx',
             classes=['damaged door', 'damaged window', 'damaged headlight', 'damaged mirror', 'dent', 'damaged hood',
                      'damaged bumper', 'damaged wind shield']
         )
@@ -46,7 +32,7 @@ def detect_damage(fileBase64):
 
 def main_task(applicationId: int):
     file = (db.Application.get(db.Application.id == applicationId)).file
-    result_car = detect_car(file)
+    result_car = type_of_car(file)
     time.sleep(5)
 
     # result_car 0 - успешно выполнился
@@ -54,26 +40,25 @@ def main_task(applicationId: int):
     # result_car 2 - файл битый
 
     if result_car["status"] == 0:
-        if result_car["typeVehicle"] != "Car":
+        if not result_car["isCar"]:
             (db.Application.update(isCar=False, status=2, result="AUTOREPAIR.BAD_RESULT: Car not found").where(
                 db.Application.id == applicationId)).execute()
         else:
-            (db.Application.update(isCar=True).where(db.Application.id == applicationId)).execute()
-            result_damage = detect_damage(file)
             # result_damage == 0 (дефекты обнаружены)
             # result_damage == 1 (дефекты не обнаружены)
             # result_damage == 2 (файл битый)
 
+            result_damage = detect_damage(file)
 
             if result_damage["status"] == 0:
-                (db.Application.update(status=2, result=result_damage["prediction"]).where(
+                (db.Application.update(status=2, isCar=True, result=result_damage["prediction"]).where(
                     db.Application.id == applicationId)).execute()
 
             if result_damage["status"] == 1:
-                (db.Application.update(status=2, result=result_damage["prediction"]).where(
+                (db.Application.update(status=2, isCar=True, result=result_damage["prediction"]).where(
                     db.Application.id == applicationId)).execute()
 
 
     if result_car["status"] == 1:
-        (db.Application.update(status=3, result="AUTOREPAIR.FILELIB: File problem").where(
+        (db.Application.update(status=3,  result="AUTOREPAIR.FILELIB: File problem").where(
             db.Application.id == applicationId)).execute()
