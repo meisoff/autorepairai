@@ -28,7 +28,7 @@ def detect_damage(fileBase64):
             "prediction": json.dumps(results),
         }
     except:
-        return {"status": 2}
+        return {"status": 1}
 
 def main_task(applicationId: int):
     file = (db.Application.get(db.Application.id == applicationId)).file

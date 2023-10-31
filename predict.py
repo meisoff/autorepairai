@@ -23,3 +23,7 @@ import base64
 
 # result = detect_car(base64.b64encode("./car_type/nocar.jpg"))
 # print(result["status"], result["prediction"])
+
+num = 0.8
+
+print(float(num))
