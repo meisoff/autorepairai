@@ -1,4 +1,4 @@
-from my_fastapi_app.models import File
+from models import File
 import onnx
 import onnxruntime as ort
 import cv2

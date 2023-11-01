@@ -2,7 +2,7 @@ import uvicorn
 from fastapi import FastAPI, BackgroundTasks
 from fastapi.responses import JSONResponse, Response, FileResponse
 from fastapi.middleware.cors import CORSMiddleware
-from my_fastapi_app.db import database as db
+from db import database as db
 from models import File
 from detect import main_task
 from fastapi.staticfiles import StaticFiles
