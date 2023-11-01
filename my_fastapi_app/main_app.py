@@ -1,15 +1,28 @@
-import asyncio
 import uvicorn
 from fastapi import FastAPI, BackgroundTasks
-from fastapi.exceptions import HTTPException
-from fastapi.responses import JSONResponse, Response
-from concurrent.futures import ThreadPoolExecutor
+from fastapi.responses import JSONResponse, Response, FileResponse
+from fastapi.middleware.cors import CORSMiddleware
 from my_fastapi_app.db import database as db
 from models import File
 from detect import main_task
+from fastapi.staticfiles import StaticFiles
+
 
 app = FastAPI(docs_url="/model-api")
+app.mount("/static", StaticFiles(directory="static"), name="static")
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Разрешение всех источников
+    allow_credentials=True,
+    allow_methods=["*"],  # Разрешение всех методов
+    allow_headers=["*"],  # Разрешение всех заголовков
+)
+
+@app.get("/", tags=["Root"])
+async def get_index():
+    # Замените "index.html" на путь к вашему файлу HTML
+    return FileResponse("./templates/index.html")
 
 @app.post("/api/v1/public/detection/application/create", tags=["Working with the application"])
 def create_application():

@@ -1,6 +1,7 @@
 import time
 from io import BytesIO
 
+
 from my_fastapi_app.classfication_car import type_of_car
 from my_fastapi_app.db import database as db
 from main import Detection
