@@ -1,3 +1,5 @@
+import json
+
 import uvicorn
 from fastapi import FastAPI, BackgroundTasks
 from fastapi.responses import JSONResponse, Response, FileResponse
@@ -7,7 +9,8 @@ from models import File
 from detect import main_task
 from fastapi.staticfiles import StaticFiles
 import requests
-from config import RSA_API, regions
+from config import RSA_API, regions, for_parsing
+from get_prices import get_price
 
 app = FastAPI(docs_url="/model-api")
 app.mount("/static", StaticFiles(directory="static"), name="static")
@@ -85,39 +88,51 @@ def get_result(applicationId: int):
         return JSONResponse(status_code=200, content={"result": f"The process was terminated with an error, try again"})
 
 
+@app.get("/api/v1/public/detection/{applicationId}/list_prices", tags=["Detail's prices"])
+def get_prices_list(applicationId: int, report_date: str, rf_subject: int):
+    status = db.Application.select(db.Application.status).where(db.Application.id == applicationId)[0].status
+    if status == 0:
+        return Response(status_code=200, content="It's impossible to get prices. The file is in draft status.",
+                        media_type="text/plain")
+    if status == 1:
+        return Response(status_code=200, content="It's impossible to get prices. The file is in process.",
+                        media_type="text/plain")
+    if status == 2:
+        row = db.Application.get(db.Application.id == applicationId)
+        list_of_prices = []
+        if row.prices:
+            return JSONResponse(status_code=200, content=json.loads(row.prices))
+        else:
+            row = db.Application.get(db.Application.id == applicationId)
+            labels = json.loads(row.result)["classes"]
+            if len(labels) and row.model:
+                for i in labels:
+                    all_prices_of_detail = []
+                    for k, v in for_parsing[f"{row.model}"][i].items():
+                        obj = get_price(report_date, v, rf_subject)
+                        all_prices_of_detail.append({f"{k}": f"{obj['spare_price']}"})
+                    list_of_prices.append(all_prices_of_detail)
+
+                (db.Application.update(prices=json.dumps(list_of_prices)).where(
+                    db.Application.id == applicationId)).execute()
+
+                return JSONResponse(status_code=200, content=list_of_prices)
+
+            else:
+                return Response(status_code=200, content="Damage not found")
+
+    if status == 3:
+        return JSONResponse(status_code=200,
+                            content={"result": f"The process was terminated with an error, try upload file again"})
+
+
 @app.get("/api/v1/public/detection/{applicationId}/prices", tags=["Detail's prices"])
-def get_prices(report_date: str,
-               catalog_number: str,
-               rf_subject: int,
-               car_brand):
-    # берем название субъекта из нашего справочника
-    rf_subject = regions[f"{rf_subject}"]
-
-    # получаем справочник субъектов РФ
-    get_rf_subject_ids_result = requests.get(RSA_API['get_rf_subject_ids'].format(report_date))
-    subjects = {row['subjectName']: row['subjectRF'] for row in get_rf_subject_ids_result.json()}
-
-    # получаем cписок марок автомобилей
-    get_oem_ids_result = requests.get(RSA_API['get_oem_ids'].format(report_date))
-    brands = {row['name']: row['id'] for row in get_oem_ids_result.json()}
-
-    # получаем цены на запчасть
-    request_data = {
-        'oemId': brands[car_brand],
-        'subjectRF': subjects[rf_subject],
-        'versionDate': report_date,
-        'partNumber1': catalog_number
-    }
-    get_price_url_result = requests.post(RSA_API['get_price_url'], json=request_data)
-    spare_info = get_price_url_result.json()['repairPartDtoList'][0]
-
-    if spare_info['found']:
-        return {
-            'spare_name': spare_info['spareName'],
-            'reg_coef': spare_info['regCoef'],
-            'spare_price': spare_info['sparePrice'],
-            'base_cost': spare_info['baseCost']
-        }
+def get_price_of_detail(report_date: str,
+                        catalog_number: str,
+                        rf_subject: int):
+    return get_price(report_date,
+                     catalog_number,
+                     rf_subject)
 
 
 if __name__ == '__main__':

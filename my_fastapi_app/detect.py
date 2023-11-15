@@ -30,7 +30,7 @@ def detect_damage(fileBase64):
 
 def main_task(applicationId: int):
     file = (db.Application.get(db.Application.id == applicationId)).file
-    result_car = DetectModelAuto.start(file)
+    result_car = DetectModelAuto().start(file)
 
     # result_car 0 - успешно выполнился (вернул True|False)
     # result_car 1 - не выполнился
@@ -44,7 +44,7 @@ def main_task(applicationId: int):
             # result_damage == 1 (дефекты не обнаружены)
             # result_damage == 2 (файл битый)
 
-            if result_car["model"] is not "model not defined":
+            if result_car["model"] != "model not defined":
                 (db.Application.update(model=result_car["model"]).where(
                     db.Application.id == applicationId)).execute()
 

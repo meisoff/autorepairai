@@ -15,6 +15,7 @@ class Application(BaseModel):
     model = TextField(column_name='model', default=None, null=True)
     status = IntegerField(column_name='status', default=0)
     result = TextField(column_name='result', default=None, null=True)
+    prices = TextField(column_name='prices', default=None, null=True)
 
     class Meta:
         table_name = 'application'
