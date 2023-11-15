@@ -12,6 +12,7 @@ class Application(BaseModel):
     id = AutoField(primary_key=True, column_name='id')
     file = TextField(column_name='file', default=None, null=True)
     isCar = BooleanField(column_name="isCar", default=None, null=True)
+    model = TextField(column_name='model', default=None, null=True)
     status = IntegerField(column_name='status', default=0)
     result = TextField(column_name='result', default=None, null=True)
 

@@ -1,8 +1,5 @@
-import time
 from io import BytesIO
-
-
-from classfication_car import type_of_car
+from classfication_car import DetectModelAuto
 from db import database as db
 from main import Detection
 from PIL import Image
@@ -33,12 +30,10 @@ def detect_damage(fileBase64):
 
 def main_task(applicationId: int):
     file = (db.Application.get(db.Application.id == applicationId)).file
-    result_car = type_of_car(file)
-    time.sleep(5)
+    result_car = DetectModelAuto.start(file)
 
-    # result_car 0 - успешно выполнился
-    # result_car 1 - на фото не найдено авто
-    # result_car 2 - файл битый
+    # result_car 0 - успешно выполнился (вернул True|False)
+    # result_car 1 - не выполнился
 
     if result_car["status"] == 0:
         if not result_car["isCar"]:
@@ -48,6 +43,10 @@ def main_task(applicationId: int):
             # result_damage == 0 (дефекты обнаружены)
             # result_damage == 1 (дефекты не обнаружены)
             # result_damage == 2 (файл битый)
+
+            if result_car["model"] is not "model not defined":
+                (db.Application.update(model=result_car["model"]).where(
+                    db.Application.id == applicationId)).execute()
 
             result_damage = detect_damage(file)
 

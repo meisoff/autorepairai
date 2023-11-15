@@ -7,52 +7,81 @@ from PIL import Image
 import base64
 import numpy as np
 
-model_path = './models/classfication_car.onnx'
-model = onnx.load(model_path)
-session = ort.InferenceSession(model.SerializeToString())
 
-labels = ["Car", "Nocar"]
+class DetectModelAuto:
 
-
-def type_of_car(file: File) -> dict:
-
-    # status 0 - успешно выполнился
-    # status 1 - непредвиденная ошибка
-
-    try:
-        result = predict(file)
-        return result
-    except:
-        return {
-            "status": 1
+    def __init__(self):
+        self.labels_lada = ["Granta", "Largus", "Vesta", "XRAY"]
+        self.labels_classification = ["Car", "Nocar"]
+        self.path = {
+            "classification": './models/classification_car.onnx',
+            "lada_model": './models/model_lada.onnx'
         }
+        self.model = None
+        self.session = None
+        self.img = None
+
+    def start(self, file: File) -> dict:
+        # status 0 - успешно выполнился
+        # status 1 - непредвиденная ошибка
+
+        try:
+            self.initialization_model("classification", file)
+            isCar = self.predict("classification")
+
+            if isCar:
+                self.initialization_model("lada_model", file)
+                lada_model = self.predict("lada_model")
+
+                return {
+                    "model": lada_model,
+                    "isCar": True,
+                    "status": 0
+                }
+
+            else:
+
+                return {
+                    "isCar": False,
+                    "status": 0
+                }
+        except:
+
+            return {
+                "status": 1
+            }
+
+    def initialization_model(self, model, fileBase64):
+        self.model = onnx.load(self.path[f"{model}"])
+        self.session = ort.InferenceSession(self.model.SerializeToString())
+        image = Image.open(BytesIO(base64.b64decode(fileBase64))).convert("RGB")
+        image = np.array(image)
+        self.preprocess(image)
+
+    def preprocess(self, img):
+        img = img / 255.
+        img = cv2.resize(img, (640, 640))
+        img = (img - [0.485, 0.456, 0.406]) / [0.229, 0.224, 0.225]
+        img = np.transpose(img, axes=[2, 0, 1])
+        img = img.astype(np.float32)
+        img = np.expand_dims(img, axis=0)
+        self.img = img
+
+    def predict(self, type):
+        ort_inputs = {self.session.get_inputs()[0].name: self.img}
+        preds = self.session.run(None, ort_inputs)[0]
+        preds = np.squeeze(preds)
+        a = np.argsort(preds)[::-1]
+
+        if type == "classification":
+            if self.labels_classification[a[0]] == "Car" and float(preds[a[0]]) > 0.7:
+                return True
+            else:
+                return False
+        else:
+            if float(preds[a[0]]) > 0.5:
+                return self.labels_lada[a[0]]
+            else:
+                return "model not defined"
 
 
-def preprocess(img):
-    img = img / 255.
-    img = cv2.resize(img, (640, 640))
-    img = (img - [0.485, 0.456, 0.406]) / [0.229, 0.224, 0.225]
-    img = np.transpose(img, axes=[2, 0, 1])
-    img = img.astype(np.float32)
-    img = np.expand_dims(img, axis=0)
-    return img
-
-def predict(fileBase64):
-    image = Image.open(BytesIO(base64.b64decode(fileBase64))).convert("RGB")
-    image = np.array(image)
-    img = preprocess(image)
-    ort_inputs = {session.get_inputs()[0].name: img}
-    preds = session.run(None, ort_inputs)[0]
-    preds = np.squeeze(preds)
-    a = np.argsort(preds)[::-1]
-    print(float(preds[a[0]]) > 0.7)
-    print(float(preds[a[0]]))
-    if labels[a[0]] == "Car" and float(preds[a[0]]) > 0.7:
-        typeCar = True
-    else:
-        typeCar = False
-
-    return {
-        "status": 0,
-        "isCar": typeCar
-    }
