@@ -126,7 +126,7 @@ def get_prices_list(applicationId: int, report_date: str, rf_subject: int):
                             content={"result": f"The process was terminated with an error, try upload file again"})
 
 
-@app.get("/api/v1/public/detection/{applicationId}/prices", tags=["Detail's prices"])
+@app.get("/api/v1/public/detection/prices", tags=["Detail's prices"])
 def get_price_of_detail(report_date: str,
                         catalog_number: str,
                         rf_subject: int):
