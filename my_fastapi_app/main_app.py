@@ -1,16 +1,18 @@
 import json
-
 import uvicorn
-from fastapi import FastAPI, BackgroundTasks
+from fastapi import FastAPI, BackgroundTasks, HTTPException, Header, Depends
 from fastapi.responses import JSONResponse, Response, FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from db import database as db
 from models import File
 from detect import main_task
 from fastapi.staticfiles import StaticFiles
-import requests
-from config import RSA_API, regions, for_parsing
+from config import for_parsing
 from get_prices import get_price
+from validate import validate_email, validate_password
+from fastapi.security import APIKeyHeader
+import hashlib
+from fastapi.openapi.utils import get_openapi
 
 app = FastAPI(docs_url="/model-api")
 app.mount("/static", StaticFiles(directory="static"), name="static")
@@ -23,21 +25,91 @@ app.add_middleware(
     allow_headers=["*"],  # Разрешение всех заголовков
 )
 
+security_definitions = {
+    "APIKeyHeader": {
+        "type": "apiKey",
+        "name": "X-API-Key",
+        "in": "header"
+    }
+}
 
-@app.get("/", tags=["Root"])
+api_key_dependency = APIKeyHeader(name="X-API-Key")
+
+# Зависимость для проверки API-ключа
+async def verify_api_key(api_key: str = Depends(api_key_dependency)):
+    if not db.Account.select().where(db.Account.userGuid == api_key):
+        raise HTTPException(status_code=403, detail="Invalid API key")
+    return api_key
+
+# Добавляем Security Definitions в OpenAPI schema
+def custom_openapi():
+    if app.openapi_schema:
+        return app.openapi_schema
+    openapi_schema = get_openapi(
+        title="Autorepairai API",
+        version="0.1.0",
+        description="API for detect damaged detail and get prices",
+        routes=app.routes,
+    )
+    openapi_schema["components"]["securitySchemes"] = security_definitions
+    app.openapi_schema = openapi_schema
+    return app.openapi_schema
+
+app.openapi = custom_openapi
+
+@app.post("/api/v1/public/account/register", tags=["Account"])
+def register(login: str, password: str):
+    try:
+        flag_log, reason_log = validate_email(login)
+        if flag_log:
+            flag_pass, reason_pass = validate_password(password)
+            if flag_pass:
+                for_reg = login + password
+                for_reg = for_reg[5:] + for_reg[:5]
+                userGuid = str(hashlib.sha1(for_reg.encode('utf-8')).hexdigest())
+                db.Account.create(login=login, password=password, userGuid=userGuid)
+                return {"userGuid": f"{userGuid}"}
+            else:
+                text = ";".join(reason_pass)
+                return {"System message": f"{text}"}
+        else:
+            return {"System message": f"{reason_log}"}
+
+    except:
+        return {"System message": "Unknown Error. Try again later"}
+
+
+@app.get("/api/v1/public/account/auth", tags=["Account"])
+def authorization(login: str, password: str):
+    try:
+        login_row = db.Account.select().where(db.Account.login == login)[0]
+        if login_row:
+            if login_row.password == password:
+                userGuid = login_row.userGuid
+                return {"userGuid": f"{userGuid}"}
+            else:
+                return {"System message": "Неверный пароль"}
+        else:
+            return {"System message": "Пользователь не зарегистрирован"}
+
+    except:
+        return {"System message": "Unknown Error. Try again later"}
+
+
+@app.get("/", include_in_schema=False)
 async def get_index():
-    # Замените "index.html" на путь к вашему файлу HTML
     return FileResponse("./templates/index.html")
 
 
 @app.post("/api/v1/public/detection/application/create", tags=["Working with the application"])
-def create_application():
-    new_application = db.Application.create()
+async def create_application(dependencies=Depends(verify_api_key)):
+    account_id = db.Account.select().where(db.Account.userGuid == dependencies)[0].id
+    new_application = db.Application.create(account_id=account_id)
     return {"applicationId": new_application.id}
 
 
 @app.post("/api/v1/public/detection/{applicationId}/file", tags=["Working with the application"])
-def download_file(applicationId: int, fileBase64: File):
+def download_file(applicationId: int, fileBase64: File, dependencies=Depends(verify_api_key)):
     status = db.Application.get(db.Application.id == applicationId).status
     if status == 0:
         (db.Application.update(file=fileBase64.fileBase64).where(db.Application.id == applicationId)).execute()
@@ -47,7 +119,7 @@ def download_file(applicationId: int, fileBase64: File):
 
 
 @app.post("/api/v1/public/detection/{applicationId}/send", tags=["Working with the application"])
-async def send_application(background_tasks: BackgroundTasks, applicationId: int):
+async def send_application(background_tasks: BackgroundTasks, applicationId: int, dependencies=Depends(verify_api_key)):
     ### Status 0 - черновик
     ### Status 1 - в обработке
     ### Status 2 - успешно завершен
@@ -62,14 +134,14 @@ async def send_application(background_tasks: BackgroundTasks, applicationId: int
 
 
 @app.get("/api/v1/public/detection/{applicationId}/status", tags=["Working with the application"])
-def get_status(applicationId: int):
+def get_status(applicationId: int, dependencies=Depends(verify_api_key)):
     # Берем статус из заявки и возвращаем
     status = (db.Application.select(db.Application.status).where(db.Application.id == applicationId))[0].status
     return {"status": status}
 
 
 @app.get("/api/v1/public/detection/{applicationId}/result", tags=["Working with the application"])
-def get_result(applicationId: int):
+def get_result(applicationId: int, dependencies=Depends(verify_api_key)):
     status = db.Application.select(db.Application.status).where(db.Application.id == applicationId)[0].status
     if status == 0:
         return Response(status_code=200, content="It's impossible to get results. The file is in draft status.",
@@ -87,9 +159,25 @@ def get_result(applicationId: int):
     if status == 3:
         return JSONResponse(status_code=200, content={"result": f"The process was terminated with an error, try again"})
 
+@app.get("/api/v1/public/detection/application/history", tags=["Working with the application"])
+def get_histrory_application(dependencies=Depends(verify_api_key)):
+    user_id = db.Account.select().where(db.Account.userGuid == dependencies)[0].id
+    result = db.Application.select().where((db.Application.account_id == user_id) & (db.Application.status == 2))
+    all_result = []
+    for i, k in enumerate(result):
+        prices = k.prices.encode('utf-8').decode('unicode_escape')
+        all_result.append(
+            {
+                "isCar": k.isCar,
+                "boxes": k.result,
+                "prices": prices,
+                "index": i
+            }
+        )
+    return all_result
 
 @app.get("/api/v1/public/detection/{applicationId}/list_prices", tags=["Detail's prices"])
-def get_prices_list(applicationId: int, report_date: str, rf_subject: int):
+def get_prices_list(applicationId: int, report_date: str, rf_subject: int, dependencies=Depends(verify_api_key)):
     status = db.Application.select(db.Application.status).where(db.Application.id == applicationId)[0].status
     if status == 0:
         return Response(status_code=200, content="It's impossible to get prices. The file is in draft status.",
@@ -129,7 +217,7 @@ def get_prices_list(applicationId: int, report_date: str, rf_subject: int):
 @app.get("/api/v1/public/detection/prices", tags=["Detail's prices"])
 def get_price_of_detail(report_date: str,
                         catalog_number: str,
-                        rf_subject: int):
+                        rf_subject: int, api_key: str = Depends(verify_api_key)):
     return get_price(report_date,
                      catalog_number,
                      rf_subject)
