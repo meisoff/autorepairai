@@ -24,6 +24,9 @@ import base64
 # result = detect_car(base64.b64encode("./car_type/nocar.jpg"))
 # print(result["status"], result["prediction"])
 
-num = 0.8
+import  re
+str = '3 товара за 200.99'
+pat = r'\d+.\d'
+match = re.search(pat, str)
 
-print(float(num))
+print(match.group())

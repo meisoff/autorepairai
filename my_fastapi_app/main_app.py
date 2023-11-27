@@ -4,7 +4,7 @@ from fastapi import FastAPI, BackgroundTasks, HTTPException, Header, Depends
 from fastapi.responses import JSONResponse, Response, FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from db import database as db
-from models import File
+from models import File, UserInfo
 from detect import main_task
 from fastapi.staticfiles import StaticFiles
 from config import for_parsing
@@ -35,11 +35,13 @@ security_definitions = {
 
 api_key_dependency = APIKeyHeader(name="X-API-Key")
 
+
 # Зависимость для проверки API-ключа
 async def verify_api_key(api_key: str = Depends(api_key_dependency)):
     if not db.Account.select().where(db.Account.userGuid == api_key):
         raise HTTPException(status_code=403, detail="Invalid API key")
     return api_key
+
 
 # Добавляем Security Definitions в OpenAPI schema
 def custom_openapi():
@@ -55,45 +57,54 @@ def custom_openapi():
     app.openapi_schema = openapi_schema
     return app.openapi_schema
 
+
 app.openapi = custom_openapi
 
+
 @app.post("/api/v1/public/account/register", tags=["Account"])
-def register(login: str, password: str):
+async def register(user_info: UserInfo):
+    login = user_info.login
+    password = user_info.password
     try:
         flag_log, reason_log = validate_email(login)
-        if flag_log:
-            flag_pass, reason_pass = validate_password(password)
-            if flag_pass:
-                for_reg = login + password
-                for_reg = for_reg[5:] + for_reg[:5]
-                userGuid = str(hashlib.sha1(for_reg.encode('utf-8')).hexdigest())
-                db.Account.create(login=login, password=password, userGuid=userGuid)
-                return {"userGuid": f"{userGuid}"}
-            else:
-                text = ";".join(reason_pass)
-                return {"System message": f"{text}"}
-        else:
-            return {"System message": f"{reason_log}"}
-
     except:
-        return {"System message": "Unknown Error. Try again later"}
+        raise HTTPException(status_code=500, detail="System message: Unknown Error. Try again later")
+
+    if flag_log:
+        flag_pass, reason_pass = validate_password(password)
+        if flag_pass:
+            for_reg = login + password
+            for_reg = for_reg[5:] + for_reg[:5]
+            userGuid = str(hashlib.sha1(for_reg.encode('utf-8')).hexdigest())
+            db.Account.create(login=login, password=password, userGuid=userGuid)
+            return {"userGuid": f"{userGuid}"}
+        else:
+            text = f"System message: {';'.join(reason_pass)}"
+            raise HTTPException(status_code=400, detail=text)
+    else:
+        raise HTTPException(status_code=400, detail=f"System message: {reason_log}")
 
 
 @app.get("/api/v1/public/account/auth", tags=["Account"])
-def authorization(login: str, password: str):
+def authorization(user_info: UserInfo):
+    login = user_info.login
+    password = user_info.password
     try:
         login_row = db.Account.select().where(db.Account.login == login)[0]
-        if login_row:
-            if login_row.password == password:
-                userGuid = login_row.userGuid
-                return {"userGuid": f"{userGuid}"}
-            else:
-                return {"System message": "Неверный пароль"}
-        else:
-            return {"System message": "Пользователь не зарегистрирован"}
-
     except:
-        return {"System message": "Unknown Error. Try again later"}
+        raise HTTPException(500, "System message Unknown Error. Try again later")
+
+
+    if login_row:
+        if login_row.password == password:
+            userGuid = login_row.userGuid
+            return {"userGuid": f"{userGuid}"}
+        else:
+            raise HTTPException(400, "System message: Неверный пароль")
+    else:
+        raise HTTPException("System message: Пользователь не зарегистрирован")
+
+
 
 
 @app.get("/", include_in_schema=False)
@@ -159,6 +170,7 @@ def get_result(applicationId: int, dependencies=Depends(verify_api_key)):
     if status == 3:
         return JSONResponse(status_code=200, content={"result": f"The process was terminated with an error, try again"})
 
+
 @app.get("/api/v1/public/detection/application/history", tags=["Working with the application"])
 def get_histrory_application(dependencies=Depends(verify_api_key)):
     user_id = db.Account.select().where(db.Account.userGuid == dependencies)[0].id
@@ -175,6 +187,7 @@ def get_histrory_application(dependencies=Depends(verify_api_key)):
             }
         )
     return all_result
+
 
 @app.get("/api/v1/public/detection/{applicationId}/list_prices", tags=["Detail's prices"])
 def get_prices_list(applicationId: int, report_date: str, rf_subject: int, dependencies=Depends(verify_api_key)):
