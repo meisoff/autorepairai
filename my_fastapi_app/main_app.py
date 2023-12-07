@@ -1,10 +1,10 @@
 import json
 import uvicorn
 from fastapi import FastAPI, BackgroundTasks, HTTPException, Header, Depends
-from fastapi.responses import JSONResponse, Response, FileResponse
+from fastapi.responses import JSONResponse, Response, RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
 from db import database as db
-from models import File, UserInfo
+from models import File, UserInfo, AutoInfo
 from detect import main_task
 from fastapi.staticfiles import StaticFiles
 from config import for_parsing
@@ -85,7 +85,11 @@ async def register(user_info: UserInfo):
         raise HTTPException(status_code=400, detail=f"System message: {reason_log}")
 
 
-@app.get("/api/v1/public/account/auth", tags=["Account"])
+@app.get("/", include_in_schema=False)
+async def get_index():
+    return RedirectResponse(url="/model-api")
+
+@app.post("/api/v1/public/account/auth", tags=["Account"])
 def authorization(user_info: UserInfo):
     login = user_info.login
     password = user_info.password
@@ -103,13 +107,6 @@ def authorization(user_info: UserInfo):
             raise HTTPException(400, "System message: Неверный пароль")
     else:
         raise HTTPException("System message: Пользователь не зарегистрирован")
-
-
-
-
-@app.get("/", include_in_schema=False)
-async def get_index():
-    return FileResponse("./templates/index.html")
 
 
 @app.post("/api/v1/public/detection/application/create", tags=["Working with the application"])
@@ -150,6 +147,15 @@ def get_status(applicationId: int, dependencies=Depends(verify_api_key)):
     status = (db.Application.select(db.Application.status).where(db.Application.id == applicationId))[0].status
     return {"status": status}
 
+@app.patch("/api/v1/public/detection/{applicationId}/auto_info", tags=["Working with the application"])
+async def update_auto_info(applicationId: int, autoInfo: AutoInfo, dependencies=Depends(verify_api_key)):
+    status = db.Application.get(db.Application.id == applicationId).status
+    if status != 3:
+        (db.Application.update(mark=autoInfo.mark, model=autoInfo.model, year=autoInfo.year).where(db.Application.id == applicationId)).execute()
+        return {"System message": "Application auto info updated."}
+    else:
+        return {"System message": f"status={status}. Just try create new application"}
+
 
 @app.get("/api/v1/public/detection/{applicationId}/result", tags=["Working with the application"])
 def get_result(applicationId: int, dependencies=Depends(verify_api_key)):
@@ -161,10 +167,16 @@ def get_result(applicationId: int, dependencies=Depends(verify_api_key)):
         return Response(status_code=200, content="It's impossible to get results. The file is in process.",
                         media_type="text/plain")
     if status == 2:
-        row = db.Application.get(db.Application.id == applicationId)
+        k = db.Application.get(db.Application.id == applicationId)
+
+        prices = k.prices.encode('utf-8').decode('unicode_escape') if k.prices else None
         result_of_detect = {
-            "isCar": row.isCar,
-            "result": row.result
+            "mark": k.mark,
+            "model": k.model,
+            "year": k.year,
+            "isCar": k.isCar,
+            "boxes": k.result,
+            "prices": prices,
         }
         return JSONResponse(status_code=200, content=result_of_detect)
     if status == 3:
@@ -180,6 +192,9 @@ def get_histrory_application(dependencies=Depends(verify_api_key)):
         prices = k.prices.encode('utf-8').decode('unicode_escape')
         all_result.append(
             {
+                "mark": k.mark,
+                "model": k.model,
+                "year": k.year,
                 "isCar": k.isCar,
                 "boxes": k.result,
                 "prices": prices,

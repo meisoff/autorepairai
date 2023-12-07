@@ -15,7 +15,7 @@ class DetectModelAuto:
         self.labels_classification = ["Car", "Nocar"]
         self.path = {
             "classification": 'C:\\Users\\Александр\\PycharmProjects\\autorepairai_2\\my_fastapi_app\\models\\classfication_car.onnx',
-            "lada_model": 'C:\\Users\\Александр\\PycharmProjects\\autorepairai_2\\my_fastapi_app\\models\\model_lada.onnx'
+            # "lada_model": 'C:\\Users\\Александр\\PycharmProjects\\autorepairai_2\\my_fastapi_app\\models\\model_lada.onnx'
         }
         self.model = None
         self.session = None
@@ -25,16 +25,15 @@ class DetectModelAuto:
         # status 0 - успешно выполнился
         # status 1 - непредвиденная ошибка
 
-        # try:
+        try:
             self.initialization_model("classification", file)
             isCar = self.predict("classification")
 
             if isCar:
-                self.initialization_model("lada_model", file)
-                lada_model = self.predict("lada_model")
+                # self.initialization_model("lada_model", file)
+                # lada_model = self.predict("lada_model")
 
                 return {
-                    "model": lada_model,
                     "isCar": True,
                     "status": 0
                 }
@@ -45,11 +44,11 @@ class DetectModelAuto:
                     "isCar": False,
                     "status": 0
                 }
-        # except:
-        #
-        #     return {
-        #         "status": 1
-        #     }
+        except:
+
+            return {
+                "status": 1
+            }
 
     def initialization_model(self, model, fileBase64):
         self.model = onnx.load(self.path[f"{model}"])

@@ -44,10 +44,6 @@ def main_task(applicationId: int):
             # result_damage == 1 (дефекты не обнаружены)
             # result_damage == 2 (файл битый)
 
-            if result_car["model"] != "model not defined":
-                (db.Application.update(model=result_car["model"]).where(
-                    db.Application.id == applicationId)).execute()
-
             result_damage = detect_damage(file)
 
             if result_damage["status"] == 0:

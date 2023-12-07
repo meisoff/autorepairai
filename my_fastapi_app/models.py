@@ -6,3 +6,8 @@ class File(BaseModel):
 class UserInfo(BaseModel):
     login: str
     password: str
+
+class AutoInfo(BaseModel):
+    mark: str
+    model: str
+    year: str
