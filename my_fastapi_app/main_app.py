@@ -1,10 +1,10 @@
 import json
 import uvicorn
-from fastapi import FastAPI, BackgroundTasks, HTTPException, Header, Depends
+from fastapi import FastAPI, BackgroundTasks, HTTPException, Depends
 from fastapi.responses import JSONResponse, Response, RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
 from db import database as db
-from models import File, UserInfo, AutoInfo
+from models import File, UserInfo, AutoInfo, DamageInfo
 from detect import main_task
 from fastapi.staticfiles import StaticFiles
 from config import for_parsing
@@ -89,6 +89,7 @@ async def register(user_info: UserInfo):
 async def get_index():
     return RedirectResponse(url="/model-api")
 
+
 @app.post("/api/v1/public/account/auth", tags=["Account"])
 def authorization(user_info: UserInfo):
     login = user_info.login
@@ -98,7 +99,6 @@ def authorization(user_info: UserInfo):
     except:
         raise HTTPException(500, "System message Unknown Error. Try again later")
 
-
     if login_row:
         if login_row.password == password:
             userGuid = login_row.userGuid
@@ -106,7 +106,7 @@ def authorization(user_info: UserInfo):
         else:
             raise HTTPException(400, "System message: Неверный пароль")
     else:
-        raise HTTPException("System message: Пользователь не зарегистрирован")
+        raise HTTPException(400, "System message: Пользователь не зарегистрирован")
 
 
 @app.post("/api/v1/public/detection/application/create", tags=["Working with the application"])
@@ -147,14 +147,70 @@ def get_status(applicationId: int, dependencies=Depends(verify_api_key)):
     status = (db.Application.select(db.Application.status).where(db.Application.id == applicationId))[0].status
     return {"status": status}
 
+@app.patch("/api/v1/public/detection/{applicationId}/damage_info", tags=["Working with the application"])
+async def update_damage_info(applicationId: int, damageInfo: DamageInfo, dependencies=Depends(verify_api_key)):
+    status = db.Application.get(db.Application.id == applicationId).status
+    if status != 3:
+        row = (db.Application.get(db.Application.id == applicationId))
+        row = json.loads(row.result)
+
+        damageListInfo = ['damaged door', 'damaged window', 'damaged headlight', 'damaged mirror', 'damaged hood',
+                     'damaged bumper', 'damaged wind shield']
+
+        if len(damageInfo.damageList) > 0:
+            for i in damageInfo.damageList:
+                if i not in damageListInfo:
+                    raise HTTPException(status_code=400, detail=f"System message: The said damage is not in accordance with the format. Current format: {damageListInfo}")
+
+            damageListToAdd = []
+            for i in damageInfo.damageList:
+                if i not in row["classes"]:
+                    damageListToAdd.append(i)
+
+            if len(damageListToAdd) > 0:
+                classes = []
+                boxes = []
+                confidences = []
+
+                for i, k in enumerate(row["classes"]):
+                    if k in damageListToAdd:
+                        classes.append(k)
+                        boxes.append(row["boxes"][i])
+                        confidences.append(row["confidences"][i])
+                        damageListToAdd.remove(k)
+                for i in damageListToAdd:
+                    classes.append(i)
+                    boxes.append([])
+                    confidences.append(0)
+
+
+                row["classes"] = classes
+                row["boxes"] = boxes
+                row["confidences"] = confidences
+
+                (db.Application.update(result=json.dumps(row)).where(
+                    db.Application.id == applicationId)).execute()
+
+                return {"System message": "Application auto info updated."}
+            else:
+                return {"System message": "All damages already in damageList."}
+        else:
+            raise HTTPException(status_code=400, detail=f"System message: damageList is empty")
+
+    else:
+        return {"System message": f"status={status}. Just try create new application"}
+
+
 @app.patch("/api/v1/public/detection/{applicationId}/auto_info", tags=["Working with the application"])
 async def update_auto_info(applicationId: int, autoInfo: AutoInfo, dependencies=Depends(verify_api_key)):
     status = db.Application.get(db.Application.id == applicationId).status
     if status != 3:
-        (db.Application.update(mark=autoInfo.mark, model=autoInfo.model, year=autoInfo.year).where(db.Application.id == applicationId)).execute()
+        (db.Application.update(mark=autoInfo.mark, model=autoInfo.model, year=autoInfo.year).where(
+            db.Application.id == applicationId)).execute()
         return {"System message": "Application auto info updated."}
     else:
         return {"System message": f"status={status}. Just try create new application"}
+
 
 
 @app.get("/api/v1/public/detection/{applicationId}/result", tags=["Working with the application"])
@@ -224,7 +280,7 @@ def get_prices_list(applicationId: int, report_date: str, rf_subject: int, depen
             if len(labels) and row.model:
                 for i in labels:
                     all_prices_of_detail = []
-                    for k, v in for_parsing[f"{row.model}"][i].items():
+                    for k, v in for_parsing[f"{row.model.lower()}"][i].items():
                         obj = get_price(report_date, v, rf_subject)
                         all_prices_of_detail.append({f"{k}": f"{obj['spare_price']}"})
                     list_of_prices.append(all_prices_of_detail)

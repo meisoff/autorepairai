@@ -11,3 +11,6 @@ class AutoInfo(BaseModel):
     mark: str
     model: str
     year: str
+
+class DamageInfo(BaseModel):
+    damageList: list
