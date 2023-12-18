@@ -1,7 +1,12 @@
 from peewee import *
+from os import environ
 
-pg_db = PostgresqlDatabase('postgres', user='postgres', password='111',
-                           host='localhost', port=5433)
+
+pg_db = PostgresqlDatabase(user=environ["POSTGRES_USER"], password=environ["POSTGRES_PASSWORD"],
+                           host=environ["HOSTNAME"], database=environ["POSTGRES_DB"], port=5432)
+
+# pg_db = PostgresqlDatabase('postgres', user='postgres', password='postgres',
+#                            host='postgres', port=5432)
 
 class BaseModel(Model):
     class Meta:
