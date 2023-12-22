@@ -1,0 +1,8 @@
+FROM python:3.9
+
+WORKDIR /src
+
+COPY my_fastapi_app/requirements.txt . 
+
+RUN pip install --no-cache-dir --upgrade -r requirements.txt
+RUN apt-get update && apt-get install ffmpeg libsm6 libxext6  -y
