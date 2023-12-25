@@ -14,7 +14,7 @@ class DetectModelAuto:
         self.labels_lada = ["Granta", "Largus", "Vesta", "XRAY"]
         self.labels_classification = ["Car", "Nocar"]
         self.path = {
-            "classification": 'C:\\Users\\Александр\\PycharmProjects\\autorepairai_2\\my_fastapi_app\\models\\classfication_car.onnx',
+            "classification": './models/classification_car.onnx',
             # "lada_model": 'C:\\Users\\Александр\\PycharmProjects\\autorepairai_2\\my_fastapi_app\\models\\model_lada.onnx'
         }
         self.model = None
@@ -25,7 +25,7 @@ class DetectModelAuto:
         # status 0 - успешно выполнился
         # status 1 - непредвиденная ошибка
 
-        try:
+        # try:
             self.initialization_model("classification", file)
             isCar = self.predict("classification")
 
@@ -44,7 +44,7 @@ class DetectModelAuto:
                     "isCar": False,
                     "status": 0
                 }
-        except:
+        # except:
 
             return {
                 "status": 1

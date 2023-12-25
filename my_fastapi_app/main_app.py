@@ -61,7 +61,7 @@ def custom_openapi():
     return app.openapi_schema
 
 
-app.openapi = custom_openapi
+app.openapi = custom_openapi 
 
 @app.post("/api/v1/public/account/register", tags=["Account"])
 async def register(user_info: UserInfo):
