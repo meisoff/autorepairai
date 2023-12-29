@@ -2,3 +2,4 @@
 parser_autoru/dataset_v2/*
 parser_autoru/new/*
 parser_autoru/old/*
+__pycache__/

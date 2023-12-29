@@ -13,9 +13,13 @@ from validate import validate_email, validate_password
 from fastapi.security import APIKeyHeader
 import hashlib
 from fastapi.openapi.utils import get_openapi
+from os import environ 
+
 
 app = FastAPI(docs_url="/model-api")
 app.mount("/static", StaticFiles(directory="static"), name="static")
+
+app.is_bd_connected_and_tables_created = False
 
 app.add_middleware(
     CORSMiddleware,
@@ -34,7 +38,6 @@ security_definitions = {
 }
 
 api_key_dependency = APIKeyHeader(name="X-API-Key")
-
 
 # Зависимость для проверки API-ключа
 async def verify_api_key(api_key: str = Depends(api_key_dependency)):
@@ -58,11 +61,18 @@ def custom_openapi():
     return app.openapi_schema
 
 
-app.openapi = custom_openapi
-
+app.openapi = custom_openapi 
 
 @app.post("/api/v1/public/account/register", tags=["Account"])
 async def register(user_info: UserInfo):
+    if not app.is_bd_connected_and_tables_created:
+        try:
+            db.pg_db.connect()
+            db.pg_db.create_tables([db.Account, db.Application])
+            app.is_bd_connected_and_tables_created = True
+        except Exception as e:
+            print(e)
+
     login = user_info.login
     password = user_info.password
     try:
@@ -92,6 +102,13 @@ async def get_index():
 
 @app.post("/api/v1/public/account/auth", tags=["Account"])
 def authorization(user_info: UserInfo):
+    if not app.is_bd_connected_and_tables_created:
+        try:
+            db.pg_db.connect()
+            db.pg_db.create_tables([db.Account, db.Application])
+            app.is_bd_connected_and_tables_created = True
+        except Exception as e:
+            print(e)
     login = user_info.login
     password = user_info.password
     try:
@@ -140,7 +157,7 @@ async def send_application(background_tasks: BackgroundTasks, applicationId: int
     else:
         return {"System message": f"status={status}. Only a request with status 0 can be sent for processing"}
 
-
+ 
 @app.get("/api/v1/public/detection/{applicationId}/status", tags=["Working with the application"])
 def get_status(applicationId: int, dependencies=Depends(verify_api_key)):
     # Берем статус из заявки и возвращаем

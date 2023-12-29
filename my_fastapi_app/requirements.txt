@@ -1,0 +1,12 @@
+fastapi
+pydantic
+uvicorn
+peewee
+python-multipart
+onnx
+onnxruntime
+opencv-python
+Pillow
+nest_asyncio
+requests
+psycopg2
